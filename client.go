@@ -71,7 +71,7 @@ func (c *Client) GetXRPCClient() *xrpc.Client {
 }
 
 func (c *Client) shouldRetryWithRefreshedToken(ctx context.Context, err *error) bool {
-	if err == nil {
+	if *err == nil {
 		return false
 	}
 
@@ -118,7 +118,7 @@ func (c *Client) refreshToken(ctx context.Context) error {
 
 	// Access token without read lock, as we are write locking
 	currentToken := c.client.Auth.AccessJwt
-	if c.isAccessTokenExpired(currentToken) {
+	if !c.isAccessTokenExpired(currentToken) {
 		// Another routine already refreshed the token
 		return nil
 	}
