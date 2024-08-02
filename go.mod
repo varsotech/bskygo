@@ -7,6 +7,7 @@ toolchain go1.22.5
 require (
 	github.com/bluesky-social/indigo v0.0.0-20240720180436-a24c6825e724
 	github.com/golang-jwt/jwt/v5 v5.2.1
+	golang.org/x/net v0.21.0
 )
 
 require (
