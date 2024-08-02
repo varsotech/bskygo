@@ -28,9 +28,10 @@ type Client struct {
 
 func NewClient(username, password string, options ...Option) *Client {
 	c := &Client{
-		username: username,
-		password: password,
-		host:     defaultHost,
+		atprotoClient: atproto.New(),
+		username:      username,
+		password:      password,
+		host:          defaultHost,
 	}
 
 	for _, option := range options {
@@ -45,7 +46,7 @@ func NewClient(username, password string, options ...Option) *Client {
 }
 
 // Connect establishes a session with the server.
-func (c *Client) Connect(ctx context.Context) error {
+func (c *Client) Connect(ctx context.Context) (func(), error) {
 	sessionInput := &atproto.ServerCreateSession_Input{
 		Identifier: c.username,
 		Password:   c.password,
@@ -53,7 +54,7 @@ func (c *Client) Connect(ctx context.Context) error {
 
 	sessionDetails, err := c.atprotoClient.ServerCreateSession(ctx, c.client, sessionInput)
 	if err != nil {
-		return fmt.Errorf("failed creating session: %w", err)
+		return nil, fmt.Errorf("failed creating session: %w", err)
 	}
 
 	c.client.Auth = &xrpc.AuthInfo{
@@ -63,7 +64,12 @@ func (c *Client) Connect(ctx context.Context) error {
 		Did:        sessionDetails.Did,
 	}
 
-	return nil
+	// Start routines
+	ctx, cancel := context.WithCancel(ctx)
+
+	return func() {
+		cancel()
+	}, nil
 }
 
 func (c *Client) GetXRPCClient() *xrpc.Client {
@@ -159,7 +165,7 @@ type CreateFeedPostOutput struct {
 	Uri string
 }
 
-func (c *Client) CreateFeedPost(ctx context.Context, post *FeedPost) (*CreateFeedPostOutput, error) {
+func (c *Client) FeedCreatePost(ctx context.Context, post *FeedPost) (*CreateFeedPostOutput, error) {
 	createRecordInput := &atproto.RepoCreateRecord_Input{
 		Collection: "app.bsky.feed.post",
 		Repo:       c.client.Auth.Did,
@@ -179,4 +185,17 @@ func (c *Client) CreateFeedPost(ctx context.Context, post *FeedPost) (*CreateFee
 		Cid: response.Cid,
 		Uri: response.Uri,
 	}, nil
+}
+
+func (c *Client) GetHandleDid(ctx context.Context, handle string) (string, error) {
+	var response *atproto.IdentityResolveHandle_Output
+	err := c.makeAuthenticatedRequest(ctx, func() (err error) {
+		response, err = c.atprotoClient.IdentityResolveHandle(ctx, c.client, handle)
+		return
+	})
+	if err != nil {
+		return "", err
+	}
+
+	return response.Did, nil
 }

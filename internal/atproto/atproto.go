@@ -24,3 +24,7 @@ func (a *Impl) RepoCreateRecord(ctx context.Context, c *xrpc.Client, input *Repo
 func (a *Impl) ServerRefreshSession(ctx context.Context, c *xrpc.Client) (*ServerRefreshSession_Output, error) {
 	return atproto.ServerRefreshSession(ctx, c)
 }
+
+func (a *Impl) IdentityResolveHandle(ctx context.Context, c *xrpc.Client, handle string) (*IdentityResolveHandle_Output, error) {
+	return atproto.IdentityResolveHandle(ctx, c, handle)
+}
