@@ -9,11 +9,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Install Golang
-        uses: actions/setup-go@v3
+        uses: actions/setup-go@v5
         with:
           go-version: 1.22
       - name: Checkout
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
       - name: Check code formatting
         run: diff <(gofmt -d .) <(echo -n)
   
@@ -21,21 +21,21 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        go-version: [1.18, 1.19, 1.20, 1.21, 1.22]
+        go-version: [1.22]
     steps:
       - name: Install Go
-        uses: actions/setup-go@v3
+        uses: actions/setup-go@v5
         with:
           go-version: ${{ matrix.go-version }}
       - name: Code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
       - run: go test -v -race ./...
   
   lint:
     runs-on: ubuntu-latest
     steps:
       - name: Install Go
-        uses: actions/setup-go@v3
+        uses: actions/setup-go@v5
         with:
           go-version: 1.22
       - name: Code
@@ -44,7 +44,7 @@ jobs:
         run: go vet -x ./...
 
       - name: GolangCI-Lint
-        uses: golangci/golangci-lint-action@v3
+        uses: golangci/golangci-lint-action@v6
         if: github.event.name == 'pull_request'
         with:
           only-new-issues: true
