@@ -2,23 +2,15 @@ package bskygo
 
 import (
 	"context"
-	"errors"
-	"fmt"
 	lexutil "github.com/bluesky-social/indigo/lex/util"
-	"github.com/bluesky-social/indigo/xrpc"
-	"github.com/golang-jwt/jwt/v5"
 	"github.com/varsotech/bskygo/internal/atproto"
-	"net/http"
-	"sync"
-	"time"
+	"github.com/varsotech/bskygo/internal/xrpc"
 )
 
 const defaultHost = "https://bsky.social"
 
 type Client struct {
-	client      *xrpc.Client
-	clientMutex sync.RWMutex
-
+	xrpcClient    *xrpc.Client
 	atprotoClient atproto.ATProto
 
 	username string
@@ -38,31 +30,18 @@ func NewClient(username, password string, options ...Option) *Client {
 		option(c)
 	}
 
-	c.client = &xrpc.Client{
-		Host: c.host,
-	}
-
+	c.xrpcClient = xrpc.New(c.host)
 	return c
 }
 
 // Connect establishes a session with the server.
 func (c *Client) Connect(ctx context.Context) (func(), error) {
-	sessionInput := &atproto.ServerCreateSession_Input{
-		Identifier: c.username,
-		Password:   c.password,
-	}
-
-	sessionDetails, err := c.atprotoClient.ServerCreateSession(ctx, c.client, sessionInput)
+	sessionDetails, err := c.createSession(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("failed creating session: %w", err)
+		return nil, err
 	}
 
-	c.client.Auth = &xrpc.AuthInfo{
-		AccessJwt:  sessionDetails.AccessJwt,
-		RefreshJwt: sessionDetails.RefreshJwt,
-		Handle:     sessionDetails.Handle,
-		Did:        sessionDetails.Did,
-	}
+	c.xrpcClient.UpdateAuth(sessionDetails.AccessJwt, sessionDetails.RefreshJwt, sessionDetails.Handle, sessionDetails.Did)
 
 	// Start routines
 	ctx, cancel := context.WithCancel(ctx)
@@ -72,92 +51,18 @@ func (c *Client) Connect(ctx context.Context) (func(), error) {
 	}, nil
 }
 
-func (c *Client) GetXRPCClient() *xrpc.Client {
-	return c.client
-}
-
-func (c *Client) shouldRetryWithRefreshedToken(ctx context.Context, err *error) bool {
-	if *err == nil {
-		return false
+func (c *Client) createSession(ctx context.Context) (sessionDetails *atproto.ServerCreateSession_Output, err error) {
+	sessionInput := &atproto.ServerCreateSession_Input{
+		Identifier: c.username,
+		Password:   c.password,
 	}
 
-	var xrpcErr *xrpc.Error
-	if !errors.As(*err, &xrpcErr) {
-		return false
-	}
+	err = c.xrpcClient.Use(ctx, c.atprotoClient, func(client *xrpc.XRPC) (err error) {
+		sessionDetails, err = c.atprotoClient.ServerCreateSession(ctx, client, sessionInput)
+		return
+	})
 
-	if xrpcErr.StatusCode != http.StatusUnauthorized {
-		return false
-	}
-
-	refreshErr := c.refreshToken(ctx)
-	if refreshErr != nil {
-		*err = refreshErr
-		return false
-	}
-
-	return true
-}
-
-func (c *Client) isAccessTokenExpired(token string) bool {
-	claims := jwt.MapClaims{}
-	jwtToken, _, _ := jwt.NewParser().ParseUnverified(token, &claims)
-	if jwtToken == nil {
-		return true
-	}
-
-	expiration, err := claims.GetExpirationTime()
-	if err != nil {
-		return true
-	}
-
-	if expiration.UTC().Before(time.Now()) {
-		return true
-	}
-
-	return false
-}
-
-func (c *Client) refreshToken(ctx context.Context) error {
-	c.clientMutex.Lock()
-	defer c.clientMutex.Unlock()
-
-	// Access token without read lock, as we are write locking
-	currentToken := c.client.Auth.AccessJwt
-	if !c.isAccessTokenExpired(currentToken) {
-		// Another routine already refreshed the token
-		return nil
-	}
-
-	sessionDetails, err := c.atprotoClient.ServerRefreshSession(ctx, c.client)
-	if err != nil {
-		return fmt.Errorf("failed refreshing session: %w", err)
-	}
-
-	c.client.Auth = &xrpc.AuthInfo{
-		AccessJwt:  sessionDetails.AccessJwt,
-		RefreshJwt: sessionDetails.RefreshJwt,
-		Handle:     sessionDetails.Handle,
-		Did:        sessionDetails.Did,
-	}
-
-	return nil
-}
-
-func (c *Client) makeRLockedRequest(f func() error) error {
-	c.clientMutex.RLock()
-	defer c.clientMutex.RUnlock()
-	return f()
-}
-
-// makeAuthenticatedRequest attempts making the request with a read lock on the session. If 401 is returned
-// it will write lock the session and refresh the token, unless another routine already did.
-func (c *Client) makeAuthenticatedRequest(ctx context.Context, f func() error) error {
-	err := c.makeRLockedRequest(f)
-	if c.shouldRetryWithRefreshedToken(ctx, &err) {
-		return f()
-	}
-	return err
+	return
 }
 
 type CreateFeedPostOutput struct {
@@ -166,17 +71,19 @@ type CreateFeedPostOutput struct {
 }
 
 func (c *Client) FeedCreatePost(ctx context.Context, post *FeedPost) (*CreateFeedPostOutput, error) {
-	createRecordInput := &atproto.RepoCreateRecord_Input{
-		Collection: "app.bsky.feed.post",
-		Repo:       c.client.Auth.Did,
-		Record:     &lexutil.LexiconTypeDecoder{Val: post.record},
-	}
-
 	var response *atproto.RepoCreateRecord_Output
-	err := c.makeAuthenticatedRequest(ctx, func() (err error) {
-		response, err = c.atprotoClient.RepoCreateRecord(ctx, c.client, createRecordInput)
+
+	err := c.xrpcClient.Use(ctx, c.atprotoClient, func(xrpc *xrpc.XRPC) (err error) {
+		createRecordInput := &atproto.RepoCreateRecord_Input{
+			Collection: "app.bsky.feed.post",
+			Repo:       xrpc.Auth.Did,
+			Record:     &lexutil.LexiconTypeDecoder{Val: post.record},
+		}
+
+		response, err = c.atprotoClient.RepoCreateRecord(ctx, xrpc, createRecordInput)
 		return
 	})
+
 	if err != nil {
 		return nil, err
 	}
@@ -189,10 +96,12 @@ func (c *Client) FeedCreatePost(ctx context.Context, post *FeedPost) (*CreateFee
 
 func (c *Client) GetHandleDid(ctx context.Context, handle string) (string, error) {
 	var response *atproto.IdentityResolveHandle_Output
-	err := c.makeAuthenticatedRequest(ctx, func() (err error) {
-		response, err = c.atprotoClient.IdentityResolveHandle(ctx, c.client, handle)
+
+	err := c.xrpcClient.Use(ctx, c.atprotoClient, func(xrpc *xrpc.XRPC) (err error) {
+		response, err = c.atprotoClient.IdentityResolveHandle(ctx, xrpc, handle)
 		return
 	})
+
 	if err != nil {
 		return "", err
 	}

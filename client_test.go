@@ -68,17 +68,24 @@ func TestClientTokenRefresh(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer closer()
-	
+
 	_, err = client.FeedCreatePost(context.Background(), NewFeedPost("text"))
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	if client.client.Auth.AccessJwt != newAccessToken {
-		t.Fatal("Access jwt was not refreshed")
-	}
+	err = client.xrpcClient.Use(context.Background(), client.atprotoClient, func(xrpc *xrpc.Client) error {
+		if xrpc.Auth.AccessJwt != newAccessToken {
+			t.Fatal("Access jwt was not refreshed")
+		}
 
-	if client.client.Auth.RefreshJwt != newRefreshToken {
-		t.Fatal("Refresh jwt was not refreshed")
+		if xrpc.Auth.RefreshJwt != newRefreshToken {
+			t.Fatal("Refresh jwt was not refreshed")
+		}
+
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
 	}
 }
