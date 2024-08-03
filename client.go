@@ -5,6 +5,7 @@ import (
 	lexutil "github.com/bluesky-social/indigo/lex/util"
 	"github.com/varsotech/bskygo/internal/atproto"
 	"github.com/varsotech/bskygo/internal/firehose"
+	"github.com/varsotech/bskygo/internal/log"
 	"github.com/varsotech/bskygo/internal/xrpc"
 	"golang.org/x/sync/errgroup"
 )
@@ -16,6 +17,7 @@ type Client struct {
 	atprotoClient  atproto.ATProto
 	firehoseClient *firehose.Firehose
 
+	logger               log.Logger
 	username             string
 	password             string
 	host                 string
@@ -28,7 +30,7 @@ func NewClient(username, password string, options ...ClientOption) *Client {
 	c := &Client{
 		xrpcClient:           nil,
 		atprotoClient:        atproto.New(),
-		firehoseClient:       firehose.New(),
+		logger:               log.NewSlog(),
 		username:             username,
 		password:             password,
 		host:                 defaultHost,
@@ -40,6 +42,8 @@ func NewClient(username, password string, options ...ClientOption) *Client {
 	}
 
 	c.xrpcClient = xrpc.New(c.host)
+	c.firehoseClient = firehose.New(c.logger)
+
 	return c
 }
 

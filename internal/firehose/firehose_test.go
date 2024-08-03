@@ -6,6 +6,7 @@ import (
 	"github.com/gorilla/websocket"
 	"github.com/varsotech/bskygo/internal/firehose/internal/dialer"
 	"github.com/varsotech/bskygo/internal/firehose/internal/events"
+	"github.com/varsotech/bskygo/internal/log"
 	"strings"
 	"testing"
 	"time"
@@ -25,7 +26,7 @@ func (e *EventsFatalErrorMock) HandleRepoStream(ctx context.Context, con *websoc
 }
 
 func TestFirehose_ConnectAndListen_FatalError(t *testing.T) {
-	firehose := New()
+	firehose := New(log.NewSlog())
 	firehose.dialer = &dialer.DialerSanityMock{}
 	firehose.events = &EventsFatalErrorMock{}
 
@@ -56,7 +57,7 @@ func (e *EventsRetryOnResetMock) HandleRepoStream(ctx context.Context, con *webs
 }
 
 func TestFirehose_ConnectAndListen_RetryOnResetTrue(t *testing.T) {
-	firehose := New()
+	firehose := New(log.NewSlog())
 	firehose.dialer = &dialer.DialerSanityMock{}
 	firehose.events = &EventsRetryOnResetMock{}
 
@@ -67,7 +68,7 @@ func TestFirehose_ConnectAndListen_RetryOnResetTrue(t *testing.T) {
 }
 
 func TestFirehose_ConnectAndListen_RetryOnResetFalse(t *testing.T) {
-	firehose := New()
+	firehose := New(log.NewSlog())
 	firehose.dialer = &dialer.DialerSanityMock{}
 	firehose.events = &EventsRetryOnResetMock{}
 
