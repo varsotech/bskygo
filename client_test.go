@@ -21,11 +21,10 @@ func TestClient_Connect(t *testing.T) {
 	client := NewClient(fakeHandle, fakePassword)
 	client.atprotoClient = &atproto.Mock{}
 
-	closer, err := client.Connect(context.Background())
+	err := client.Connect(context.Background())
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer closer()
 }
 
 type ClientTokenRefreshMock struct {
@@ -63,11 +62,10 @@ func TestClientTokenRefresh(t *testing.T) {
 	client := NewClient(fakeHandle, fakePassword)
 	client.atprotoClient = &ClientTokenRefreshMock{}
 
-	closer, err := client.Connect(context.Background())
+	err := client.Connect(context.Background())
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer closer()
 
 	_, err = client.FeedCreatePost(context.Background(), NewFeedPost("text"))
 	if err != nil {

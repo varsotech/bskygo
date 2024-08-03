@@ -29,9 +29,10 @@ func New(host string) *Client {
 	}
 }
 
-// use locks the client for reading and provides access to it.
-// It also returns the access token that was used in the request
-func (c *Client) use(f func(client *xrpc.Client) error) (string, error) {
+// UseWithoutRefresh locks the client for reading and provides access to it.
+// It also returns the access token that was used in the request.
+// Unlike Use, it does not refresh the token and retries when getting unauthorized error.
+func (c *Client) UseWithoutRefresh(f func(client *xrpc.Client) error) (string, error) {
 	c.clientMutex.RLock()
 	defer c.clientMutex.RUnlock()
 
@@ -46,7 +47,7 @@ func (c *Client) use(f func(client *xrpc.Client) error) (string, error) {
 // Use locks the client for reading and provides access to it.
 // If it gets an unauthorized error, it refreshes the token and retries
 func (c *Client) Use(ctx context.Context, atprotoClient atproto.ATProto, f func(client *xrpc.Client) error) error {
-	usedAccessToken, err := c.use(f)
+	usedAccessToken, err := c.UseWithoutRefresh(f)
 	if err == nil {
 		return nil
 	}
@@ -66,13 +67,17 @@ func (c *Client) Use(ctx context.Context, atprotoClient atproto.ATProto, f func(
 	}
 
 	// Retry after having refreshed the token
-	_, err = c.use(f)
+	_, err = c.UseWithoutRefresh(f)
 	return err
 }
 
 func (c *Client) refreshToken(ctx context.Context, atprotoClient atproto.ATProto, usedAccessToken string) error {
 	c.clientMutex.Lock()
 	defer c.clientMutex.Unlock()
+
+	if c.client.Auth == nil {
+		return fmt.Errorf("client auth has not been initialized yet")
+	}
 
 	currentToken := c.client.Auth.AccessJwt
 	if currentToken != usedAccessToken {

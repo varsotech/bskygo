@@ -14,11 +14,10 @@ func main() {
 	client := bskygo.NewClient(username, password)
 
 	ctx := context.Background()
-	closer, err := client.Connect(ctx)
+	err := client.Connect(ctx)
 	if err != nil {
 		log.Fatal(err)
 	}
-	defer closer()
 
 	handle := "varso.org"
 	handleDid, err := client.GetHandleDid(ctx, handle)
@@ -26,10 +25,10 @@ func main() {
 		log.Fatal(err)
 	}
 
-	_, err = client.FeedCreatePost(ctx, bskygo.NewFeedPost("Hello world! ").Mention(handle, handleDid))
+	post, err := client.FeedCreatePost(ctx, bskygo.NewFeedPost("Hello world! ").Mention(handle, handleDid))
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	//fmt.Println(post.Cid)
+	log.Println(post.Uri)
 }
